@@ -8,12 +8,17 @@
 
 //Led Strip (Addressable)
 #include <Adafruit_NeoPixel.h>
+//obd2
+#include "BluetoothSerial.h"
 
 //CONSTANTS
 
 //Led Strip
 #define LED_DATA_PIN 32
 #define LED_COUNT    30
+//obd2
+#define BT_NAME "ESP32"
+uint8_t elmMAC[6] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
 
 //GLOBAL VARIABLES
 int mode = 0;
@@ -21,12 +26,26 @@ int led_helper = 0;
 long time_led_helper = 0;
 bool led_increase = true;
 
+bool elm_ready = false;
+
 //INSTANCES
 
 //Led Strip
 Adafruit_NeoPixel strip(LED_COUNT, LED_DATA_PIN, NEO_GRB + NEO_KHZ800);
 
 void setup() {
+  //Serial
+  Serial.begin(115200);
+  Serial.println("Starting Bluetooth");
+  SerialBT.begin(BT_NAME, true);
+
+  Serial.println("Searching OBD reader device (elm)...");
+  if(SerialBT.connect(elmMAC)){
+    Serial.println("Connected to device by Bluetooth!");
+    startELM();
+  }else{
+    Serial.println("Failed to connect.");
+  }
   
   //Led Strip
   strip.begin();
@@ -38,7 +57,7 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   switch(mode){
-    case 0:
+    case 0: // Only loading
       loadingLed();
       break;
   }
@@ -62,4 +81,28 @@ void loadingLed(){
     }
     strip.show();
   }
+}
+
+void startELM(){
+  delay(1000);
+  sendCommand("ATE0"); // Echo off
+  sendCommand("ATL0"); // Linefeeds off
+  sendCommand("ATH0"); // Headers off
+  elm_ready = true;
+  Serial.println("ELM327 ready!");
+}
+
+String sendCommand(const char* cmd, int timeout = 1000) {
+  SerialBT.println(cmd);
+  String response = "";
+  unsigned long start = millis();
+  while (millis() - start < timeout) {
+    while (SerialBT.available()) {
+      char c = SerialBT.read();
+      response += c;
+    }
+    if (response.indexOf('>') >= 0) break;
+  }
+  response.trim();
+  return response;
 }
