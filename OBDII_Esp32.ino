@@ -9,6 +9,7 @@
 //Led Strip (Addressable)
 #include <Adafruit_NeoPixel.h>
 //obd2
+#include <Arduino.h>
 #include "BluetoothSerial.h"
 
 //CONSTANTS
@@ -32,6 +33,23 @@ bool elm_ready = false;
 
 //Led Strip
 Adafruit_NeoPixel strip(LED_COUNT, LED_DATA_PIN, NEO_GRB + NEO_KHZ800);
+//Bluetooth
+BluetoothSerial SerialBT;
+
+String sendCommand(const char* cmd, int timeout = 1000) {
+  SerialBT.println(cmd);
+  String response = "";
+  unsigned long start = millis();
+  while (millis() - start < timeout) {
+    while (SerialBT.available()) {
+      char c = SerialBT.read();
+      response += c;
+    }
+    if (response.indexOf('>') >= 0) break;
+  }
+  response.trim();
+  return response;
+}
 
 void setup() {
   //Serial
@@ -92,17 +110,3 @@ void startELM(){
   Serial.println("ELM327 ready!");
 }
 
-String sendCommand(const char* cmd, int timeout = 1000) {
-  SerialBT.println(cmd);
-  String response = "";
-  unsigned long start = millis();
-  while (millis() - start < timeout) {
-    while (SerialBT.available()) {
-      char c = SerialBT.read();
-      response += c;
-    }
-    if (response.indexOf('>') >= 0) break;
-  }
-  response.trim();
-  return response;
-}
