@@ -101,6 +101,23 @@ class MyClientCallback : public BLEClientCallbacks {
   }
 };
 
+String waitForResponse(int timeoutMs = 2000) {
+  unsigned long startTime = millis();
+
+  while (millis() - startTime < timeoutMs) {
+    // Check if data ends with '>' (ELM327 prompt)
+    if (receivedData.indexOf('>') != -1) {
+      String response = receivedData;
+      receivedData = "";
+      return response;
+    }
+    delay(10);
+  }
+
+  Serial.println("Timeout waiting for response");
+  return receivedData;
+}
+
 // STANDARD FUNCTIONS
 
 void setup() {
@@ -135,7 +152,7 @@ void loop() {
       break;
     case 1:
       if(deviceConnected){
-        rpmMode1(readMotorSpeed());
+        rpmMode1(readEngineSpeed());
       }
   }
 
@@ -148,6 +165,7 @@ void loop() {
       if (initializeELM327()) {
         Serial.println("Ready to read!\n");
         colorAll(0, 255, 0);  // GREEN = Connected
+        mode = 1;
         delay(2000);
       }
     } else {
@@ -177,7 +195,7 @@ void loop() {
       firstRun = false;
     }
     readCoolantTemperature();
-    delay(500);
+    delay(100);
   }
 
   static bool wasConnected = false;
@@ -266,23 +284,6 @@ void sendOBDCommand(String command) {
   command += "\r";    // Append carriage return (ELM327 expects this)
 
   pRxCharacteristic->writeValue(command.c_str(), command.length());
-}
-
-String waitForResponse(int timeoutMs = 2000) {
-  unsigned long startTime = millis();
-
-  while (millis() - startTime < timeoutMs) {
-    // Check if data ends with '>' (ELM327 prompt)
-    if (receivedData.indexOf('>') != -1) {
-      String response = receivedData;
-      receivedData = "";
-      return response;
-    }
-    delay(10);
-  }
-
-  Serial.println("Timeout waiting for response");
-  return receivedData;
 }
 
 bool initializeELM327() {
@@ -425,7 +426,7 @@ bool initializeELM327() {
 float readCoolantTemperature() {
   // OBD2 Mode 01 PID 05: Engine Coolant Temperature
   sendOBDCommand("0105");
-  delay(800);  // Longer wait for ISO14230-4
+  delay(300);  // Longer wait for ISO14230-4
 
   String response = waitForResponse(4000);  // Longer timeout for ISO14230-4
 
@@ -532,7 +533,7 @@ float readCoolantTemperature() {
 float readEngineSpeed() {
   // OBD2 Mode 01 PID 0C: Engine Speed (RPM)
   sendOBDCommand("010C");
-  delay(800);  // Longer wait for ISO14230-4
+  delay(300);  // Longer wait for ISO14230-4
 
   String response = waitForResponse(4000);  // Longer timeout for ISO14230-4
 
@@ -669,7 +670,7 @@ void colorAll(int r, int g, int b) {
 }
 
 void rpmMode1(float rpm){
-  ledValue = map(rpm, 0, 8000, 0, strip.numPixels());
+  int ledValue = (int)map(rpm, 0, 8000, 0, strip.numPixels());
   strip.clear();
   for (int i = 0; i < ledValue; i++) {
     strip.setPixelColor(i, strip.Color(217, 142, 2));
