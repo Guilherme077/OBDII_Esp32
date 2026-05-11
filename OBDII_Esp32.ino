@@ -147,8 +147,11 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   switch (mode) {
-    case 0:  // Only loading
-      loadingLed();
+    case 0:
+      //loadingLed();
+      colorAll(255, 0, 0);  // RED = Failed to find ELM
+      delay(2000);
+      ESP.restart();
       break;
     case 1:
       if(deviceConnected){
