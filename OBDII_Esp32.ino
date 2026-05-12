@@ -23,6 +23,7 @@
 //Led Strip
 #define LED_DATA_PIN 32
 #define LED_COUNT 30
+#define LED_CURVE 0.7 // Increase to activate more leds slower.
 //obd2
 #define ELM_MAC_ADDRESS "11:22:33:44:55:66"
 // Option 1: ISO 15765-4 CAN (recommended, modern vehicles)
@@ -50,6 +51,7 @@ static BLERemoteCharacteristic* pTxCharacteristic = nullptr;
 static BLERemoteCharacteristic* pRxCharacteristic = nullptr;
 static bool deviceConnected = false;
 static bool doConnect = false;
+static bool testeA = false;
 static String receivedData = "";
 
 //INSTANCES
@@ -76,6 +78,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
       elmDevice = new BLEAdvertisedDevice(advertisedDevice);
       doConnect = true;
     }
+    testeA = true;
   }
 };
 
@@ -118,6 +121,15 @@ String waitForResponse(int timeoutMs = 2000) {
   return receivedData;
 }
 
+//
+float map_curve(int value, int in_max, float out_max) {
+    if (value <= 0) return 0;
+    if (value >= in_max) return out_max;
+
+    float normalized = (float)value / (float)in_max; // 0.0 a 1.0
+    return pow(normalized, LED_CURVE) * out_max;
+}
+
 // STANDARD FUNCTIONS
 
 void setup() {
@@ -148,14 +160,17 @@ void loop() {
   // put your main code here, to run repeatedly:
   switch (mode) {
     case 0:
-      //loadingLed();
-      colorAll(255, 0, 0);  // RED = Failed to find ELM
-      delay(2000);
-      ESP.restart();
+      loadingLed();
+      // if(!doConnect && testeA){
+      //   colorAll(255, 0, 0);  // RED = Failed to find ELM
+      // delay(2000);
+      // ESP.restart();
+      // }
+      
       break;
     case 1:
       if(deviceConnected){
-        rpmMode1(readEngineSpeed());
+        rpmMode2(readEngineSpeed());
       }
   }
 
@@ -675,9 +690,26 @@ void colorAll(int r, int g, int b) {
 void rpmMode1(float rpm){
   int ledValue = (int)map(rpm, 0, 8000, 0, strip.numPixels());
   strip.clear();
+  strip.setBrightness(255);  //max = 255
   for (int i = 0; i < ledValue; i++) {
     strip.setPixelColor(i, strip.Color(217, 142, 2));
   }
   strip.show();
 
+}
+
+void rpmMode2(float rpm){
+  //int ledValue = (int)map(rpm, 0, 4500, 0, (long)(strip.numPixels()/2));
+  int led_count_on = map_curve(rpm, 6000, (strip.numPixels()/2));
+  strip.clear();
+  strip.setBrightness(255);  //max = 255
+  for (int i = 0; i < led_count_on; i++) {
+    int r1 = map(i, 0, (strip.numPixels()/2), 165, 245);
+    int g1 = map(i, 0, (strip.numPixels()/2), 245, 45);
+    int r2 = map(i+(strip.numPixels()/2), (strip.numPixels()/2), strip.numPixels(), 245, 165);
+    int g2 = map(i+(strip.numPixels()/2), (strip.numPixels()/2), strip.numPixels(), 45, 245);
+    strip.setPixelColor(i, strip.Color(r1, g1, 2));
+    strip.setPixelColor(i+(strip.numPixels()/2), strip.Color(r2, g2, 2));
+  }
+  strip.show();
 }
