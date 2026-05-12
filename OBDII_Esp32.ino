@@ -79,7 +79,7 @@ WebServer server(80);
 //Bluetooth Scan
 class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
   void onResult(BLEAdvertisedDevice advertisedDevice) {
-    Serial.print("BLE device found: ");
+    Serial.print(F("BLE device found: "));
     Serial.println(advertisedDevice.toString().c_str());
 
     // Search for ELM327 in device name (common names: "OBDII", "ELM327", "OBD2")
@@ -88,7 +88,7 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks {
 
     if (deviceName.indexOf("OBD") != -1 || deviceName.indexOf("ELM") != -1 || deviceName.indexOf("obd") != -1 || deviceName.indexOf("elm") != -1 || deviceMAC.indexOf("81:23:45:67:89:ba") != -1) {
 
-      Serial.println("ELM327 device found!");
+      Serial.println(F("ELM327 device found!"));
       BLEDevice::getScan()->stop();
       elmDevice = new BLEAdvertisedDevice(advertisedDevice);
       doConnect = true;
@@ -109,12 +109,12 @@ static void notifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic,
 //Connection Status
 class MyClientCallback : public BLEClientCallbacks {
   void onConnect(BLEClient* pclient) {
-    Serial.println("[OK] Connected to ELM327");
+    Serial.println(F("[OK] Connected to ELM327"));
     deviceConnected = true;
   }
 
   void onDisconnect(BLEClient* pclient) {
-    Serial.println("[FAILED] Connection to ELM327 lost");
+    Serial.println(F("[FAILED] Connection to ELM327 lost"));
     deviceConnected = false;
   }
 };
@@ -132,7 +132,7 @@ String waitForResponse(int timeoutMs = 2000) {
     delay(10);
   }
 
-  Serial.println("Timeout waiting for response");
+  Serial.println(F("Timeout waiting for response"));
   return receivedData;
 }
 
@@ -159,7 +159,7 @@ void setup() {
   IPAddress NMask = IPAddress (255, 255, 255, 0);
   WiFi.softAPConfig(IP, IP, NMask);
   IPAddress myIP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
+  Serial.print(F("AP IP address: "));
   Serial.println(myIP);
 
   /* SETUP YOR WEB OWN ENTRY POINTS */
@@ -178,7 +178,7 @@ void setup() {
   strip.setBrightness(100);  //max = 255
 
   // Initialize BLE
-  Serial.println("Initializing BLE...");
+  Serial.println(F("Initializing BLE..."));
   BLEDevice::init("ESP32_OBD_Reader");
 
   // Start BLE scan
@@ -188,7 +188,7 @@ void setup() {
   pBLEScan->setWindow(449);
   pBLEScan->setActiveScan(true);
 
-  Serial.println("Starting BLE scan (10 seconds)...");
+  Serial.println(F("Starting BLE scan (10 seconds)..."));
   pBLEScan->start(10, false);
 }
 
@@ -228,7 +228,7 @@ void loop() {
 
       // Initialize ELM327
       if (initializeELM327()) {
-        Serial.println("Ready to read!\n");
+        Serial.println(F("Ready to read!\n"));
         colorAll(0, 255, 0);  // GREEN = Connected
         mode = 1;
         delay(2000);
@@ -236,7 +236,7 @@ void loop() {
     } else {
       doConnect = false;
       colorAll(255, 0, 0);  // RED = Failed to connect
-      Serial.println("Connection failed. Restarting in 5 seconds...");
+      Serial.println(F("Connection failed. Restarting in 5 seconds..."));
       delay(5000);
       ESP.restart();
     }
@@ -247,13 +247,13 @@ void loop() {
     // Run a test on first iteration
     static bool firstRun = true;
     if (firstRun) {
-      Serial.println("\n>>> Running test query <<<");
+      Serial.println(F("\n>>> Running test query <<<"));
 
       // Test: Query supported PIDs (0100)
       sendOBDCommand("0100");
       delay(1000);
       String testResponse = waitForResponse(3000);
-      Serial.print("Test response (0100): ");
+      Serial.print(F("Test response (0100): "));
       Serial.println(testResponse);
 
       delay(1000);
@@ -265,7 +265,7 @@ void loop() {
 
   static bool wasConnected = false;
     if (!deviceConnected && wasConnected) {
-        Serial.println("Connection lost! Trying to reconnect...");
+        Serial.println(F("Connection lost! Trying to reconnect..."));
         
         delay(5000);
         ESP.restart();
@@ -281,67 +281,67 @@ void loop() {
 // ELM327 FUNCTIONS
 
 bool connectToELM327() {
-  Serial.println("\nTrying to connect to device...");
+  Serial.println(F("\nTrying to connect to device..."));
 
   // Create BLE client
   pClient = BLEDevice::createClient();
-  Serial.println("[OK] BLE client created");
+  Serial.println(F("[OK] BLE client created"));
 
   // Set callback for connection status
   pClient->setClientCallbacks(new MyClientCallback());
 
   // Connect to ELM327
-  Serial.print("Connecting to ");
+  Serial.print(F("Connecting to "));
   Serial.println(elmDevice->getAddress().toString().c_str());
 
   if (!pClient->connect(elmDevice)) {
-    Serial.println("[FAILED] Connection failed");
+    Serial.println(F("[FAILED] Connection failed"));
     return false;
   }
-  Serial.println("[OK] Connection established");
+  Serial.println(F("[OK] Connection established"));
 
-  Serial.println("\nChecking the connection properties...");
+  Serial.println(F("\nChecking the connection properties..."));
 
   // Retrieve service
   BLERemoteService* pRemoteService = pClient->getService(SERVICE_UUID);
   if (pRemoteService == nullptr) {
-    Serial.println("[FAILED] Service not found");
+    Serial.println(F("[FAILED] Service not found"));
     pClient->disconnect();
     return false;
   }
-  Serial.println("[OK] Service found");
+  Serial.println(F("[OK] Service found"));
 
   // Retrieve TX characteristic (ESP32 receives)
   pTxCharacteristic = pRemoteService->getCharacteristic(CHARACTERISTIC_UUID_TX);
   if (pTxCharacteristic == nullptr) {
-    Serial.println("[FAILED] TX characteristic not found");
+    Serial.println(F("[FAILED] TX characteristic not found"));
     pClient->disconnect();
     return false;
   }
-  Serial.println("[OK] TX characteristic found");
+  Serial.println(F("[OK] TX characteristic found"));
 
   // Retrieve RX characteristic (ESP32 sends)
   pRxCharacteristic = pRemoteService->getCharacteristic(CHARACTERISTIC_UUID_RX);
   if (pRxCharacteristic == nullptr) {
-    Serial.println("[FAILED] RX characteristic not found");
+    Serial.println(F("[FAILED] RX characteristic not found"));
     pClient->disconnect();
     return false;
   }
-  Serial.println("[OK] RX characteristic found");
+  Serial.println(F("[OK] RX characteristic found"));
 
   // Enable notifications for incoming data
   if (pTxCharacteristic->canNotify()) {
     pTxCharacteristic->registerForNotify(notifyCallback);
-    Serial.println("[OK] Notifications enabled");
+    Serial.println(F("[OK] Notifications enabled"));
   }
 
-  Serial.println("The connection with ELM327 is OK\n");
+  Serial.println(F("The connection with ELM327 is OK\n"));
   return true;
 }
 
 void sendOBDCommand(String command) {
   if (!deviceConnected) {
-    Serial.println("[FAILED] Not connected - command will not be sent");
+    Serial.println(F("[FAILED] Not connected - command will not be sent"));
     return;
   }
 
@@ -352,7 +352,7 @@ void sendOBDCommand(String command) {
 }
 
 bool initializeELM327() {
-  Serial.println("\nTrying to setup the ELM327...");
+  Serial.println(F("\nTrying to setup the ELM327..."));
 
   // Reset
   sendOBDCommand("ATZ");
@@ -367,14 +367,14 @@ bool initializeELM327() {
   sendOBDCommand("ATE0");
   delay(500);
   response = waitForResponse();
-  Serial.print("Echo off: ");
+  Serial.print(F("Echo off: "));
   Serial.println(response);
 
   // Remove spaces from responses
   sendOBDCommand("ATS0");
   delay(500);
   response = waitForResponse();
-  Serial.print("Spaces off: ");
+  Serial.print(F("Spaces off: "));
   Serial.println(response);
 
   // Turn off linefeed
@@ -383,28 +383,28 @@ bool initializeELM327() {
   response = waitForResponse();
 
   // IMPORTANT: Set protocol MANUALLY instead of auto-detection
-  Serial.print("Setting protocol to ");
+  Serial.print(F("Setting protocol to "));
   Serial.print(PROTOCOL_NAME);
   Serial.println("...");
 
   sendOBDCommand(OBD_PROTOCOL);
   delay(2000);  // Longer wait time for protocol setup
   response = waitForResponse(2500);
-  Serial.print("Protocol set: ");
+  Serial.print(F("Protocol set: "));
   Serial.println(response);
 
   // Turn off headers (can help with some simulators)
   sendOBDCommand("ATH0");
   delay(500);
   response = waitForResponse();
-  Serial.print("Headers off: ");
+  Serial.print(F("Headers off: "));
   Serial.println(response);
 
   // Set adaptive timing to auto (IMPORTANT for ISO14230-4!)
   sendOBDCommand("ATAT2");
   delay(500);
   response = waitForResponse();
-  Serial.print("Adaptive timing: ");
+  Serial.print(F("Adaptive timing: "));
   Serial.println(response);
 
   // Set timeout to a higher value for ISO14230-4
@@ -412,14 +412,14 @@ bool initializeELM327() {
   sendOBDCommand("ATSTFF");
   delay(500);
   response = waitForResponse();
-  Serial.print("Timeout set: ");
+  Serial.print(F("Timeout set: "));
   Serial.println(response);
 
   // Allow long messages (important for some protocols)
   sendOBDCommand("ATAL");
   delay(500);
   response = waitForResponse();
-  Serial.print("Long messages: ");
+  Serial.print(F("Long messages: "));
   Serial.println(response);
 
   // Enable keep alive - prevents connection drop!
@@ -427,41 +427,41 @@ bool initializeELM327() {
   sendOBDCommand("ATKW");
   delay(500);
   response = waitForResponse();
-  Serial.print("Keep Alive Status: ");
+  Serial.print(F("Keep Alive Status: "));
   Serial.println(response);
 
   // Query used protocol
   sendOBDCommand("ATDPN");
   delay(500);
   response = waitForResponse();
-  Serial.print(">>> Used protocol number: ");
+  Serial.print(F(">>> Used protocol number: "));
   Serial.println(response);
 
   sendOBDCommand("ATDP");
   delay(500);
   response = waitForResponse();
-  Serial.print(">>> Protocol name: ");
+  Serial.print(F(">>> Protocol name: "));
   Serial.println(response);
 
   // Voltage test (checks if OBD connection is established)
   sendOBDCommand("ATRV");
   delay(500);
   response = waitForResponse();
-  Serial.print("Voltage: ");
+  Serial.print(F("Voltage: "));
   Serial.println(response);
 
   // IMPORTANT: Initial "dummy" bus initialization
   // This ensures the bus is really connected
-  Serial.println("\n>>> Performing initial bus connection <<<");
+  Serial.println(F("\n>>> Performing initial bus connection <<<"));
   sendOBDCommand("0100");
   delay(1500);
   response = waitForResponse(5000);  // Long timeout for first connection
-  Serial.print("Initial bus response: ");
+  Serial.print(F("Initial bus response: "));
   Serial.println(response);
 
   // If BUS INIT ERROR, try again
   if (response.indexOf("ERROR") != -1 || response.indexOf("UNABLE") != -1) {
-    Serial.println("Bus init failed, retrying...");
+    Serial.println(F("Bus init failed, retrying..."));
     delay(1000);
 
     // Set protocol again
@@ -473,12 +473,12 @@ bool initializeELM327() {
     sendOBDCommand("0100");
     delay(1500);
     response = waitForResponse(5000);
-    Serial.print("Second attempt: ");
+    Serial.print(F("Second attempt: "));
     Serial.println(response);
   }
 
-  Serial.println("[OK] ELM327 initialized");
-  Serial.println("=== Initialization complete ===\n");
+  Serial.println(F("[OK] ELM327 initialized"));
+  Serial.println(F("=== Initialization complete ===\n"));
 
   // Short pause before normal queries start
   delay(1000);
@@ -497,7 +497,7 @@ float readCoolantTemperature() {
 
   // Check if an error was returned
   if (response.indexOf("NO DATA") != -1) {
-    Serial.println("[ERROR] No data - reinitializing bus...");
+    Serial.println(F("[ERROR] No data - reinitializing bus..."));
 
     // Complete bus reinitialization
     sendOBDCommand("ATZ");
@@ -514,26 +514,26 @@ float readCoolantTemperature() {
     delay(500);
     waitForResponse();
 
-    Serial.println("Bus reinitialized - retrying...");
+    Serial.println(F("Bus reinitialized - retrying..."));
 
     // Try again
     sendOBDCommand("0105");
     delay(800);
     response = waitForResponse(4000);
 
-    Serial.print("New response after reset: [");
+    Serial.print(F("New response after reset: ["));
     Serial.print(response);
     Serial.println("]");
 
     // If still NO DATA, give up
     if (response.indexOf("NO DATA") != -1 || response.indexOf("UNABLE") != -1) {
-      Serial.println("[ERROR] Still no data after reset");
+      Serial.println(F("[ERROR] Still no data after reset"));
       return -999.0;
     }
   }
 
   if (response.indexOf("UNABLE TO CONNECT") != -1) {
-    Serial.println("[FAILED] Connection to OBD bus failed - attempting reconnect");
+    Serial.println(F("[FAILED] Connection to OBD bus failed - attempting reconnect"));
 
     // Similar reset as for NO DATA
     sendOBDCommand("ATZ");
@@ -548,12 +548,12 @@ float readCoolantTemperature() {
   }
 
   if (response.indexOf("BUS INIT") != -1 && response.indexOf("ERROR") != -1) {
-    Serial.println("[ERROR] Bus initialization failed");
+    Serial.println(F("[ERROR] Bus initialization failed"));
     return -999.0;
   }
 
   if (response.indexOf("?") != -1) {
-    Serial.println("[ERROR] Unknown command");
+    Serial.println(F("[ERROR] Unknown command"));
     return -999.0;
   }
 
@@ -568,8 +568,8 @@ float readCoolantTemperature() {
 
   int pidPos = response.indexOf("4105");
   if (pidPos == -1) {
-    Serial.println("[ERROR] Invalid response or PID not supported");
-    Serial.print("Cleaned response was: ");
+    Serial.println(F("[ERROR] Invalid response or PID not supported"));
+    Serial.print(F("Cleaned response was: "));
     Serial.println(response);
     return -999.0;
   }
@@ -579,7 +579,7 @@ float readCoolantTemperature() {
   hexValue.trim();
 
   if (hexValue.length() < 2) {
-    Serial.println("[ERROR] Hex value too short");
+    Serial.println(F("[ERROR] Hex value too short"));
     return -999.0;
   }
 
@@ -590,7 +590,7 @@ float readCoolantTemperature() {
   float temperature = tempValue - 40.0;
 
   Serial.print(temperature);
-  Serial.println(" °C");
+  Serial.println(F(" °C"));
 
   return temperature;
 }
@@ -604,7 +604,7 @@ float readEngineSpeed() {
 
   // Check if an error was returned
   if (response.indexOf("NO DATA") != -1) {
-    Serial.println("[ERROR] No data - reinitializing bus...");
+    Serial.println(F("[ERROR] No data - reinitializing bus..."));
 
     // Complete bus reinitialization
     sendOBDCommand("ATZ");
@@ -621,26 +621,26 @@ float readEngineSpeed() {
     delay(500);
     waitForResponse();
 
-    Serial.println("Bus reinitialized - retrying...");
+    Serial.println(F("Bus reinitialized - retrying..."));
 
     // Try again
     sendOBDCommand("010C");
     delay(800);
     response = waitForResponse(4000);
 
-    Serial.print("New response after reset: [");
+    Serial.print(F("New response after reset: ["));
     Serial.print(response);
     Serial.println("]");
 
     // If still NO DATA, give up
     if (response.indexOf("NO DATA") != -1 || response.indexOf("UNABLE") != -1) {
-      Serial.println("[ERROR] Still no data after reset");
+      Serial.println(F("[ERROR] Still no data after reset"));
       return -999.0;
     }
   }
 
   if (response.indexOf("UNABLE TO CONNECT") != -1) {
-    Serial.println("[FAILED] Connection to OBD bus failed - attempting reconnect");
+    Serial.println(F("[FAILED] Connection to OBD bus failed - attempting reconnect"));
 
     // Similar reset as for NO DATA
     sendOBDCommand("ATZ");
@@ -655,12 +655,12 @@ float readEngineSpeed() {
   }
 
   if (response.indexOf("BUS INIT") != -1 && response.indexOf("ERROR") != -1) {
-    Serial.println("[ERROR] Bus initialization failed");
+    Serial.println(F("[ERROR] Bus initialization failed"));
     return -999.0;
   }
 
   if (response.indexOf("?") != -1) {
-    Serial.println("[ERROR] Unknown command");
+    Serial.println(F("[ERROR] Unknown command"));
     return -999.0;
   }
 
@@ -675,8 +675,8 @@ float readEngineSpeed() {
 
   int pidPos = response.indexOf("410C");
   if (pidPos == -1) {
-    Serial.println("[ERROR] Invalid response or PID not supported");
-    Serial.print("Cleaned response was: ");
+    Serial.println(F("[ERROR] Invalid response or PID not supported"));
+    Serial.print(F("Cleaned response was: "));
     Serial.println(response);
     return -999.0;
   }
@@ -688,7 +688,7 @@ float readEngineSpeed() {
   hexB.trim();
 
   if (hexA.length() < 2 || hexB.length() < 2) {
-    Serial.println("[ERROR] Hex value too short");
+    Serial.println(F("[ERROR] Hex value too short"));
     return -999.0;
   }
 
@@ -700,7 +700,7 @@ float readEngineSpeed() {
   float rpm = ((byteA * 256) + byteB) / 4.0;
 
   Serial.print(rpm);
-  Serial.println(" RPM");
+  Serial.println(F(" RPM"));
 
   return rpm;
 }
