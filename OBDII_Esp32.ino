@@ -4,12 +4,18 @@
   Created on 03/05/2026
 
   ELM connection got from https://forum.arduino.cc/t/esp32-with-elm327/1315461
+
+  This code allows wireless upload (OTA) (/update).
+  Set Partition Scheme to 'Minimal SPIFFS'.
+  
+  Change the SSID, Password and ELM_MAC
 */
 
 //LIBRARIES
 
 #include <Wire.h>
 #include <Arduino.h>
+#include <math.h>
 //Led Strip (Addressable)
 #include <Adafruit_NeoPixel.h>
 //obd2 / Bluetooth
@@ -17,6 +23,12 @@
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+//wifi
+#include <WiFi.h>
+#include <WiFiAP.h>
+#include <WebServer.h>
+//ota
+#include <ESP2SOTA.h>
 
 //CONSTANTS
 
@@ -36,8 +48,9 @@
 #define SERVICE_UUID "0000fff0-0000-1000-8000-00805f9b34fb"
 #define CHARACTERISTIC_UUID_TX "0000fff1-0000-1000-8000-00805f9b34fb"  // ESP32 receives here
 #define CHARACTERISTIC_UUID_RX "0000fff2-0000-1000-8000-00805f9b34fb"  // ESP32 sends here
-
-
+//OTA Upload
+const char* ssid = "ESP2SOTA";
+const char* password = "123456789abc";
 
 //GLOBAL VARIABLES
 int mode = 0;
@@ -58,6 +71,8 @@ static String receivedData = "";
 
 //Led Strip
 Adafruit_NeoPixel strip(LED_COUNT, LED_DATA_PIN, NEO_GRB + NEO_KHZ800);
+//wifi
+WebServer server(80);
 
 //CALLBACKS
 
@@ -136,6 +151,27 @@ void setup() {
   //Serial
   Serial.begin(115200);
 
+  //WiFi
+  WiFi.mode(WIFI_AP);  
+  WiFi.softAP(ssid, password);
+  delay(1000);
+  IPAddress IP = IPAddress (10, 10, 10, 1);
+  IPAddress NMask = IPAddress (255, 255, 255, 0);
+  WiFi.softAPConfig(IP, IP, NMask);
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(myIP);
+
+  /* SETUP YOR WEB OWN ENTRY POINTS */
+  server.on("/myurl", HTTP_GET, []() {
+    server.sendHeader("Connection", "close");
+    server.send(200, "text/plain", "Hello there!");
+  });
+
+  //OTA (Upload code Over The Air)
+  ESP2SOTA.begin(&server);
+  server.begin();
+
   //Led Strip
   strip.begin();
   strip.show();
@@ -158,6 +194,7 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
+  server.handleClient();
   switch (mode) {
     case 0:
       loadingLed();
@@ -172,7 +209,17 @@ void loop() {
       if(deviceConnected){
         rpmMode2(readEngineSpeed());
       }
+      break;
+    // case 99: // Upload code OTA Mode
+    //   colorAll(245, 245, 0);  // YELLOW = Waiting Code
+    //   Serial.println("OTA MODE!");
+    //   ArduinoOTA.handle();
+    //   break;
   }
+
+  // if(digitalRead(OTA_PIN) == LOW){
+  //   mode = 99;
+  // }
 
   if (doConnect) {
     colorAll(0, 0, 255);  // BLUE = Connecting
