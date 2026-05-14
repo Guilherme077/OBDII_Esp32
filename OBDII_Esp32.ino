@@ -29,13 +29,16 @@
 #include <WebServer.h>
 //ota
 #include <ESP2SOTA.h>
+//web
+#include "html.h"
 
 //CONSTANTS
 
 //Led Strip
 #define LED_DATA_PIN 32
 #define LED_COUNT 30
-#define LED_CURVE 0.7 // Increase to activate more leds slower.
+#define LED_CURVE 0.7  // Increase to activate more leds slower.
+#define INITIAL_MODE 2;
 //obd2
 #define ELM_MAC_ADDRESS "11:22:33:44:55:66"
 // Option 1: ISO 15765-4 CAN (recommended, modern vehicles)
@@ -57,6 +60,7 @@ int mode = 0;
 int led_helper = 0;
 long time_led_helper = 0;
 bool led_increase = true;
+int led_light_level = 255;
 //bluetooth
 static BLEAdvertisedDevice* elmDevice = nullptr;
 static BLEClient* pClient = nullptr;
@@ -138,11 +142,54 @@ String waitForResponse(int timeoutMs = 2000) {
 
 //
 float map_curve(int value, int in_max, float out_max) {
-    if (value <= 0) return 0;
-    if (value >= in_max) return out_max;
+  if (value <= 0) return 0;
+  if (value >= in_max) return out_max;
 
-    float normalized = (float)value / (float)in_max; // 0.0 a 1.0
-    return pow(normalized, LED_CURVE) * out_max;
+  float normalized = (float)value / (float)in_max;  // 0.0 a 1.0
+  return pow(normalized, LED_CURVE) * out_max;
+}
+
+//WEB
+String buildPage() {
+  String page = htmlPage;
+  page.replace("%STATUS_TEXT%", String(mode));
+  page.replace("%BRIGHTNESS_TEXT%", (led_light_level >= 150) ? "DAY" : "NIGHT");
+  page.replace("%BRIGHTNESS_CLASS%", (led_light_level >= 150) ? "day" : "night");
+  return page;
+}
+
+void handleRoot() {
+  server.send(200, "text/html", buildPage());
+}
+
+void handleRpm1() {
+  mode = 1;
+  server.send(200, "text/html", buildPage());
+}
+
+void handleRpm2() {
+  mode = 2;
+  server.send(200, "text/html", buildPage());
+}
+void handleRpm3() {
+  mode = 3;
+  server.send(200, "text/html", buildPage());
+}
+void handleRpm4() {
+  mode = 4;
+  server.send(200, "text/html", buildPage());
+}
+void handleRpm5() {
+  mode = 5;
+  server.send(200, "text/html", buildPage());
+}
+void handleTest() {
+  mode = 90;
+  server.send(200, "text/html", buildPage());
+}
+void handleLedLight(int light) {
+  led_light_level = light;
+  server.send(200, "text/html", buildPage());
 }
 
 // STANDARD FUNCTIONS
@@ -152,11 +199,11 @@ void setup() {
   Serial.begin(115200);
 
   //WiFi
-  WiFi.mode(WIFI_AP);  
+  WiFi.mode(WIFI_AP);
   WiFi.softAP(ssid, password);
   delay(1000);
-  IPAddress IP = IPAddress (10, 10, 10, 1);
-  IPAddress NMask = IPAddress (255, 255, 255, 0);
+  IPAddress IP = IPAddress(192, 168, 0, 1);
+  IPAddress NMask = IPAddress(255, 255, 255, 0);
   WiFi.softAPConfig(IP, IP, NMask);
   IPAddress myIP = WiFi.softAPIP();
   Serial.print(F("AP IP address: "));
@@ -170,6 +217,22 @@ void setup() {
 
   //OTA (Upload code Over The Air)
   ESP2SOTA.begin(&server);
+
+  //WEB
+  server.on("/", handleRoot);
+  server.on("/ledStrip/mode/rpm1", handleRpm1);
+  server.on("/ledStrip/mode/rpm2", handleRpm2);
+  server.on("/ledStrip/mode/rpm3", handleRpm3);
+  server.on("/ledStrip/mode/rpm4", handleRpm4);
+  server.on("/ledStrip/mode/rpm5", handleRpm5);
+  server.on("/ledStrip/mode/test", handleTest);
+  server.on("/ledStrip/light/255", []() {
+    handleLedLight(255);
+  });
+  server.on("/ledStrip/light/120", []() {
+    handleLedLight(120);
+  });
+
   server.begin();
 
   //Led Strip
@@ -197,29 +260,35 @@ void loop() {
   server.handleClient();
   switch (mode) {
     case 0:
-      loadingLed();
+      loadingLed(0, 0, 255);
       // if(!doConnect && testeA){
       //   colorAll(255, 0, 0);  // RED = Failed to find ELM
       // delay(2000);
       // ESP.restart();
       // }
-      
+
       break;
     case 1:
-      if(deviceConnected){
-        rpmMode2(readEngineSpeed());
+      if (deviceConnected) {
+        rpmMode1(readEngineSpeed());
+      } else {
+        loadingLed(255, 0, 0);
       }
       break;
-    // case 99: // Upload code OTA Mode
-    //   colorAll(245, 245, 0);  // YELLOW = Waiting Code
-    //   Serial.println("OTA MODE!");
-    //   ArduinoOTA.handle();
-    //   break;
+    case 2:
+      if (deviceConnected) {
+        rpmMode2(readEngineSpeed());
+      } else {
+        loadingLed(255, 179, 0);
+      }
+      break;
+    case 90:
+      colorAll(255,255,255);
+      break;
+    default:
+      loadingLed(0, 0, 255);
+      break;
   }
-
-  // if(digitalRead(OTA_PIN) == LOW){
-  //   mode = 99;
-  // }
 
   if (doConnect) {
     colorAll(0, 0, 255);  // BLUE = Connecting
@@ -230,7 +299,7 @@ void loop() {
       if (initializeELM327()) {
         Serial.println(F("Ready to read!\n"));
         colorAll(0, 255, 0);  // GREEN = Connected
-        mode = 1;
+        mode = INITIAL_MODE;
         delay(2000);
       }
     } else {
@@ -264,18 +333,17 @@ void loop() {
   }
 
   static bool wasConnected = false;
-    if (!deviceConnected && wasConnected) {
-        Serial.println(F("Connection lost! Trying to reconnect..."));
-        
-        delay(5000);
-        ESP.restart();
-    }
-    
-    // Save status
-    if (deviceConnected) {
-        wasConnected = true;
-    }
+  if (!deviceConnected && wasConnected) {
+    Serial.println(F("Connection lost! Trying to reconnect..."));
 
+    delay(5000);
+    ESP.restart();
+  }
+
+  // Save status
+  if (deviceConnected) {
+    wasConnected = true;
+  }
 }
 
 // ELM327 FUNCTIONS
@@ -707,11 +775,12 @@ float readEngineSpeed() {
 
 // LED FUNCTIONS
 
-void loadingLed() {
+void loadingLed(int r, int g, int b) {
   if (millis() > time_led_helper + 150) {
+    strip.setBrightness(led_light_level);  //max = 255
     time_led_helper = millis();
     strip.clear();
-    strip.setPixelColor(led_helper, strip.Color(0, 0, 255));
+    strip.setPixelColor(led_helper, strip.Color(r, g, b));
     if (led_helper >= strip.numPixels() - 1) {
       led_increase = false;
     }
@@ -728,35 +797,35 @@ void loadingLed() {
 }
 
 void colorAll(int r, int g, int b) {
+  strip.setBrightness(led_light_level);  //max = 255
   for (int i = 0; i < strip.numPixels(); i++) {
     strip.setPixelColor(i, strip.Color(r, g, b));
   }
   strip.show();
 }
 
-void rpmMode1(float rpm){
+void rpmMode1(float rpm) {
   int ledValue = (int)map(rpm, 0, 8000, 0, strip.numPixels());
   strip.clear();
-  strip.setBrightness(255);  //max = 255
+  strip.setBrightness(led_light_level);  //max = 255
   for (int i = 0; i < ledValue; i++) {
     strip.setPixelColor(i, strip.Color(217, 142, 2));
   }
   strip.show();
-
 }
 
-void rpmMode2(float rpm){
+void rpmMode2(float rpm) {
   //int ledValue = (int)map(rpm, 0, 4500, 0, (long)(strip.numPixels()/2));
-  int led_count_on = map_curve(rpm, 6000, (strip.numPixels()/2));
+  int led_count_on = map_curve(rpm, 6000, (strip.numPixels() / 2));
   strip.clear();
-  strip.setBrightness(255);  //max = 255
+  strip.setBrightness(led_light_level);  //max = 255
   for (int i = 0; i < led_count_on; i++) {
-    int r1 = map(i, 0, (strip.numPixels()/2), 165, 245);
-    int g1 = map(i, 0, (strip.numPixels()/2), 245, 45);
-    int r2 = map(i+(strip.numPixels()/2), (strip.numPixels()/2), strip.numPixels(), 245, 165);
-    int g2 = map(i+(strip.numPixels()/2), (strip.numPixels()/2), strip.numPixels(), 45, 245);
+    int r1 = map(i, 0, (strip.numPixels() / 2), 165, 245);
+    int g1 = map(i, 0, (strip.numPixels() / 2), 245, 45);
+    int r2 = map((strip.numPixels() - i), (strip.numPixels() / 2), strip.numPixels(), 245, 165);
+    int g2 = map((strip.numPixels() - i), (strip.numPixels() / 2), strip.numPixels(), 45, 245);
     strip.setPixelColor(i, strip.Color(r1, g1, 2));
-    strip.setPixelColor(i+(strip.numPixels()/2), strip.Color(r2, g2, 2));
+    strip.setPixelColor((strip.numPixels() - i), strip.Color(r2, g2, 2));
   }
   strip.show();
 }
