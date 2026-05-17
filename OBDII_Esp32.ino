@@ -38,7 +38,8 @@
 #define LED_DATA_PIN 32
 #define LED_COUNT 30
 #define LED_CURVE 0.7  // Increase to activate more leds slower.
-#define INITIAL_MODE 2;
+#define INITIAL_LIGHT_MODE 2;
+#define INITIAL_DISPLAY_MODE 1;
 //obd2
 #define ELM_MAC_ADDRESS "11:22:33:44:55:66"
 // Option 1: ISO 15765-4 CAN (recommended, modern vehicles)
@@ -54,11 +55,17 @@
 //OTA Upload
 const char* ssid = "ESP2SOTA";
 const char* password = "123456789abc";
+//7-seg display
+const int digit1[] = {5, 18, 19, 20, 21, 22, 23};
+const int digit2[] = {13, 12, 14, 27, 26, 25, 33};
 
 //GLOBAL VARIABLES
-int mode = 0;
+int lightMode = 0;
+int displayMode = 0;
 int led_helper = 0;
+int display_helper = 0;
 long time_led_helper = 0;
+long time_display_helper = 0;
 bool led_increase = true;
 int led_light_level = 255;
 //bluetooth
@@ -70,6 +77,19 @@ static bool deviceConnected = false;
 static bool doConnect = false;
 static bool testeA = false;
 static String receivedData = "";
+//7-seg display
+const bool digits[10][7] = {
+  {1,1,1,1,1,1,0}, // 0
+  {0,1,1,0,0,0,0}, // 1
+  {1,1,0,1,1,0,1}, // 2
+  {1,1,1,1,0,0,1}, // 3
+  {0,1,1,0,0,1,1}, // 4
+  {1,0,1,1,0,1,1}, // 5
+  {1,0,1,1,1,1,1}, // 6
+  {1,1,1,0,0,0,0}, // 7
+  {1,1,1,1,1,1,1}, // 8
+  {1,1,1,1,0,1,1}, // 9
+};
 
 //INSTANCES
 
@@ -152,7 +172,7 @@ float map_curve(int value, int in_max, float out_max) {
 //WEB
 String buildPage() {
   String page = htmlPage;
-  page.replace("%STATUS_TEXT%", String(mode));
+  page.replace("%STATUS_TEXT%", String(lightMode));
   page.replace("%BRIGHTNESS_TEXT%", (led_light_level >= 150) ? "DAY" : "NIGHT");
   page.replace("%BRIGHTNESS_CLASS%", (led_light_level >= 150) ? "day" : "night");
   return page;
@@ -163,33 +183,46 @@ void handleRoot() {
 }
 
 void handleRpm1() {
-  mode = 1;
+  lightMode = 1;
   server.send(200, "text/html", buildPage());
 }
 
 void handleRpm2() {
-  mode = 2;
+  lightMode = 2;
   server.send(200, "text/html", buildPage());
 }
 void handleRpm3() {
-  mode = 3;
+  lightMode = 3;
   server.send(200, "text/html", buildPage());
 }
 void handleRpm4() {
-  mode = 4;
+  lightMode = 4;
   server.send(200, "text/html", buildPage());
 }
 void handleRpm5() {
-  mode = 5;
+  lightMode = 5;
   server.send(200, "text/html", buildPage());
 }
 void handleTest() {
-  mode = 90;
+  lightMode = 90;
   server.send(200, "text/html", buildPage());
 }
 void handleLedLight(int light) {
   led_light_level = light;
   server.send(200, "text/html", buildPage());
+}
+
+//7 Segment Display
+void showDigit(const int pins[], int digit) {
+  for (int i = 0; i < 7; i++) {
+    digitalWrite(pins[i], digits[digit][i]);
+  }
+}
+
+void showNumber(int number) {
+  number = constrain(number, 0, 99);
+  showDigit(digit1, number / 10);
+  showDigit(digit2, number % 10);
 }
 
 // STANDARD FUNCTIONS
@@ -240,6 +273,12 @@ void setup() {
   strip.show();
   strip.setBrightness(100);  //max = 255
 
+  //7-seg display
+  for (int i = 0; i < 7; i++) {
+    pinMode(digit1[i], OUTPUT);
+    pinMode(digit2[i], OUTPUT);
+  }
+
   // Initialize BLE
   Serial.println(F("Initializing BLE..."));
   BLEDevice::init("ESP32_OBD_Reader");
@@ -258,7 +297,7 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
   server.handleClient();
-  switch (mode) {
+  switch (lightMode) {
     case 0:
       loadingLed(0, 0, 255);
       // if(!doConnect && testeA){
@@ -289,6 +328,17 @@ void loop() {
       loadingLed(0, 0, 255);
       break;
   }
+  switch(displayMode){
+    case 0:
+      showAllNumbersDisplay();
+      break;
+    case 1:
+      showNumber(readSpeedMph()); // Send speed (in mph) to 7 segment display
+    case 2:
+      showNumber(88);
+  }
+
+  
 
   if (doConnect) {
     colorAll(0, 0, 255);  // BLUE = Connecting
@@ -299,7 +349,9 @@ void loop() {
       if (initializeELM327()) {
         Serial.println(F("Ready to read!\n"));
         colorAll(0, 255, 0);  // GREEN = Connected
-        mode = INITIAL_MODE;
+        showNumber(88);
+        lightMode = INITIAL_LIGHT_MODE;
+        displayMode = INITIAL_DISPLAY_MODE;
         delay(2000);
       }
     } else {
@@ -328,7 +380,7 @@ void loop() {
       delay(1000);
       firstRun = false;
     }
-    readCoolantTemperature();
+    //readCoolantTemperature();
     delay(100);
   }
 
@@ -773,6 +825,115 @@ float readEngineSpeed() {
   return rpm;
 }
 
+float readSpeed() {
+  // OBD2 Mode 01 PID 0D: Vehicle Speed (km/h)
+  sendOBDCommand("010D");
+  delay(300);  // Longer wait for ISO14230-4
+
+  String response = waitForResponse(4000);  // Longer timeout for ISO14230-4
+
+  // Check if an error was returned
+  if (response.indexOf("NO DATA") != -1) {
+    Serial.println(F("[ERROR] No data - reinitializing bus..."));
+
+    // Complete bus reinitialization
+    sendOBDCommand("ATZ");
+    delay(2000);
+    waitForResponse(3000);
+
+    // Set protocol again
+    sendOBDCommand(OBD_PROTOCOL);
+    delay(1500);
+    waitForResponse(2000);
+
+    // Adaptive timing
+    sendOBDCommand("ATAT2");
+    delay(500);
+    waitForResponse();
+
+    Serial.println(F("Bus reinitialized - retrying..."));
+
+    // Try again
+    sendOBDCommand("010D");
+    delay(800);
+    response = waitForResponse(4000);
+
+    Serial.print(F("New response after reset: ["));
+    Serial.print(response);
+    Serial.println("]");
+
+    // If still NO DATA, give up
+    if (response.indexOf("NO DATA") != -1 || response.indexOf("UNABLE") != -1) {
+      Serial.println(F("[ERROR] Still no data after reset"));
+      return 0;
+    }
+  }
+
+  if (response.indexOf("UNABLE TO CONNECT") != -1) {
+    Serial.println(F("[FAILED] Connection to OBD bus failed - attempting reconnect"));
+
+    // Similar reset as for NO DATA
+    sendOBDCommand("ATZ");
+    delay(2000);
+    waitForResponse(3000);
+
+    sendOBDCommand(OBD_PROTOCOL);
+    delay(1500);
+    waitForResponse(2000);
+
+    return 0;
+  }
+
+  if (response.indexOf("BUS INIT") != -1 && response.indexOf("ERROR") != -1) {
+    Serial.println(F("[ERROR] Bus initialization failed"));
+    return 0;
+  }
+
+  if (response.indexOf("?") != -1) {
+    Serial.println(F("[ERROR] Unknown command"));
+    return 0;
+  }
+
+  // Parse response: format is "41 05 XX" where XX is the hex value
+  // Speed = XX (in km/h)
+
+  // Remove spaces for easier parsing
+  response.replace(" ", "");
+  response.replace("\r", "");
+  response.replace("\n", "");
+  response.replace(">", "");
+
+  int pidPos = response.indexOf("410D");
+  if (pidPos == -1) {
+    Serial.println(F("[ERROR] Invalid response or PID not supported"));
+    Serial.print(F("Cleaned response was: "));
+    Serial.println(response);
+    return 0;
+  }
+
+  // Extract hex value after "410D" (2 characters)
+  String hexValue = response.substring(pidPos + 4, pidPos + 6);
+  hexValue.trim();
+
+  if (hexValue.length() < 2) {
+    Serial.println(F("[ERROR] Hex value too short"));
+    return 0;
+  }
+
+  // Convert hex to decimal
+  int speedValue = (int)strtol(hexValue.c_str(), NULL, 16);
+
+  Serial.print(speedValue);
+  Serial.println(F(" km/h"));
+
+  return speedValue;
+}
+
+int readSpeedMph(){
+  int speed = (int)readSpeed();
+  return (int)(speed/1.6); // Convert km/h to mph
+}
+
 // LED FUNCTIONS
 
 void loadingLed(int r, int g, int b) {
@@ -828,4 +989,14 @@ void rpmMode2(float rpm) {
     strip.setPixelColor((strip.numPixels() - i), strip.Color(r2, g2, 2));
   }
   strip.show();
+}
+
+// DISPLAY FUNCTIONS
+void showAllNumbersDisplay(){
+  if (millis() > time_display_helper + 150) {
+    time_display_helper = millis();
+    (display_helper <= 99)? display_helper++ : display_helper = 0;
+    showNumber(display_helper);
+    strip.show();
+  }
 }
