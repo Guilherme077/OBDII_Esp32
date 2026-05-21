@@ -56,8 +56,8 @@
 const char* ssid = "ESP2SOTA";
 const char* password = "123456789abc";
 //7-seg display
-const int digit1[] = {5, 18, 19, 20, 21, 22, 23};
-const int digit2[] = {13, 12, 14, 27, 26, 25, 33};
+const int digit1[] = {5, 18, 19, 20, 21, 22, 4};
+const int digit2[] = {13, 12, 14, 27, 26, 25, 23};
 
 //GLOBAL VARIABLES
 int lightMode = 0;
@@ -68,6 +68,7 @@ long time_led_helper = 0;
 long time_display_helper = 0;
 bool led_increase = true;
 int led_light_level = 255;
+int testGpioActiveDigit = 0;
 //bluetooth
 static BLEAdvertisedDevice* elmDevice = nullptr;
 static BLEClient* pClient = nullptr;
@@ -175,6 +176,7 @@ String buildPage() {
   page.replace("%STATUS_TEXT%", String(lightMode));
   page.replace("%BRIGHTNESS_TEXT%", (led_light_level >= 150) ? "DAY" : "NIGHT");
   page.replace("%BRIGHTNESS_CLASS%", (led_light_level >= 150) ? "day" : "night");
+  page.replace("%ACTIVE_SEG_GPIO_TEXT%", String(testGpioActiveDigit));
   return page;
 }
 
@@ -212,6 +214,19 @@ void handleLedLight(int light) {
   server.send(200, "text/html", buildPage());
 }
 
+void testSeg(int seg){
+  displayMode = 90;
+  for (int i = 0; i < 7; i++) {
+    if(i == seg){
+      digitalWrite(digit2[i], 1);
+      testGpioActiveDigit = digit2[i];
+    }else{
+      digitalWrite(digit2[i], 0);
+    }
+  }
+  server.send(200, "text/html", buildPage());
+}
+
 //7 Segment Display
 void showDigit(const int pins[], int digit) {
   for (int i = 0; i < 7; i++) {
@@ -221,7 +236,7 @@ void showDigit(const int pins[], int digit) {
 
 void showNumber(int number) {
   number = constrain(number, 0, 99);
-  showDigit(digit1, number / 10);
+  //showDigit(digit1, number / 10);
   showDigit(digit2, number % 10);
 }
 
@@ -265,6 +280,13 @@ void setup() {
   server.on("/ledStrip/light/120", []() {
     handleLedLight(120);
   });
+  server.on("/display/segTest/0", []() {testSeg(0);});
+  server.on("/display/segTest/1", []() {testSeg(1);});
+  server.on("/display/segTest/2", []() {testSeg(2);});
+  server.on("/display/segTest/3", []() {testSeg(3);});
+  server.on("/display/segTest/4", []() {testSeg(4);});
+  server.on("/display/segTest/5", []() {testSeg(5);});
+  server.on("/display/segTest/6", []() {testSeg(6);});
 
   server.begin();
 
@@ -331,11 +353,17 @@ void loop() {
   switch(displayMode){
     case 0:
       showAllNumbersDisplay();
+      //testSegments();
       break;
     case 1:
       showNumber(readSpeedMph()); // Send speed (in mph) to 7 segment display
+      break;
     case 2:
       showNumber(88);
+      break;
+    case 90:
+    //Mode for tests
+      break;
   }
 
   
@@ -993,10 +1021,30 @@ void rpmMode2(float rpm) {
 
 // DISPLAY FUNCTIONS
 void showAllNumbersDisplay(){
-  if (millis() > time_display_helper + 150) {
+  if (millis() > time_display_helper + 1000) {
     time_display_helper = millis();
-    (display_helper <= 99)? display_helper++ : display_helper = 0;
+    if(display_helper <= 99){ display_helper++;} else{ display_helper = 0;}
     showNumber(display_helper);
-    strip.show();
+  }
+}
+
+//Add this function in some mode to check all the display segments.
+//It was made only for initial test porpuses, will be marked as deprecated when a better way to test be implemented.
+void testSegments(){
+  if (millis() > time_display_helper + 1000) {
+    time_display_helper = millis();
+    if(display_helper >= 7){
+      showNumber(88);
+      display_helper = 0;
+      delay(5000);
+    }
+    for (int i = 0; i < 7; i++) {
+      if(i == display_helper){
+        digitalWrite(digit2[i], 1);
+      }else{
+        digitalWrite(digit2[i], 0);
+      }
+    }
+    display_helper++;
   }
 }

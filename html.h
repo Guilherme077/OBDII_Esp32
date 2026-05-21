@@ -31,8 +31,18 @@ const char* htmlPage = R"rawliteral(
   <p class="%BRIGHTNESS_CLASS%">Led Strip Brightness: %BRIGHTNESS_TEXT%</p>
   <a href="/ledStrip/light/255" class="btn-select">Day</a>
   <a href="/ledStrip/light/120" class="btn-select">Night</a>
+  <p>7-Segment Display Test</p>
+  <span>To exit Display Test Mode, restart the ESP</span>
+  <p>Active GPIO: %ACTIVE_SEG_GPIO_TEXT%</p>
+  <a href="/display/segTest/0" class="btn-select">A</a>
+  <a href="/display/segTest/1" class="btn-select">B</a>
+  <a href="/display/segTest/2" class="btn-select">C</a>
+  <a href="/display/segTest/3" class="btn-select">D</a>
+  <a href="/display/segTest/4" class="btn-select">E</a>
+  <a href="/display/segTest/5" class="btn-select">F</a>
+  <a href="/display/segTest/6" class="btn-select">G</a>
   <a href="/update">Send code (upload and update)</a>
-  <a href="/ledStrip/mode/test">Test Led Strip (All leds On)</a>
+  <a href="/ledStrip/mode/test">All Led Strip White Color (DANGER!)</a>
 
 </body>
 </html>
