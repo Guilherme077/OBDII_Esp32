@@ -56,7 +56,7 @@
 const char* ssid = "ESP2SOTA";
 const char* password = "123456789abc";
 //7-seg display
-const int digit1[] = {5, 18, 19, 20, 21, 22, 4};
+const int digit1[] = {5, 18, 19, 2, 21, 22, 4};
 const int digit2[] = {13, 12, 14, 27, 26, 25, 23};
 
 //GLOBAL VARIABLES
@@ -236,7 +236,7 @@ void showDigit(const int pins[], int digit) {
 
 void showNumber(int number) {
   number = constrain(number, 0, 99);
-  //showDigit(digit1, number / 10);
+  showDigit(digit1, number / 10);
   showDigit(digit2, number % 10);
 }
 
@@ -353,6 +353,7 @@ void loop() {
   switch(displayMode){
     case 0:
       showAllNumbersDisplay();
+      //showNumber(88);
       //testSegments();
       break;
     case 1:
