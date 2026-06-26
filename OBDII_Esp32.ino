@@ -360,7 +360,7 @@ void loop() {
       showNumber(readSpeedMph()); // Send speed (in mph) to 7 segment display
       break;
     case 2:
-      showNumber(88);
+      showNumber(readTempEnv());
       break;
     case 90:
     //Mode for tests
@@ -961,6 +961,113 @@ float readSpeed() {
 int readSpeedMph(){
   int speed = (int)readSpeed();
   return (int)(speed/1.6); // Convert km/h to mph
+}
+
+float readTempEnv() {
+  // OBD2 Mode 01 PID 46: Ambient Air Temperature
+  sendOBDCommand("0146");
+  delay(300);  // Longer wait for ISO14230-4
+
+  String response = waitForResponse(4000);  // Longer timeout for ISO14230-4
+
+  // Check if an error was returned
+  if (response.indexOf("NO DATA") != -1) {
+    Serial.println(F("[ERROR] No data - reinitializing bus..."));
+
+    // Complete bus reinitialization
+    sendOBDCommand("ATZ");
+    delay(2000);
+    waitForResponse(3000);
+
+    // Set protocol again
+    sendOBDCommand(OBD_PROTOCOL);
+    delay(1500);
+    waitForResponse(2000);
+
+    // Adaptive timing
+    sendOBDCommand("ATAT2");
+    delay(500);
+    waitForResponse();
+
+    Serial.println(F("Bus reinitialized - retrying..."));
+
+    // Try again
+    sendOBDCommand("0146");
+    delay(800);
+    response = waitForResponse(4000);
+
+    Serial.print(F("New response after reset: ["));
+    Serial.print(response);
+    Serial.println("]");
+
+    // If still NO DATA, give up
+    if (response.indexOf("NO DATA") != -1 || response.indexOf("UNABLE") != -1) {
+      Serial.println(F("[ERROR] Still no data after reset"));
+      return -999.0;
+    }
+  }
+
+  if (response.indexOf("UNABLE TO CONNECT") != -1) {
+    Serial.println(F("[FAILED] Connection to OBD bus failed - attempting reconnect"));
+
+    // Similar reset as for NO DATA
+    sendOBDCommand("ATZ");
+    delay(2000);
+    waitForResponse(3000);
+
+    sendOBDCommand(OBD_PROTOCOL);
+    delay(1500);
+    waitForResponse(2000);
+
+    return -999.0;
+  }
+
+  if (response.indexOf("BUS INIT") != -1 && response.indexOf("ERROR") != -1) {
+    Serial.println(F("[ERROR] Bus initialization failed"));
+    return -999.0;
+  }
+
+  if (response.indexOf("?") != -1) {
+    Serial.println(F("[ERROR] Unknown command"));
+    return -999.0;
+  }
+
+  // Parse response: format is "41 46 XX" where XX is the hex value
+  // Temperature = XX - 40 (in °C)
+
+  // Remove spaces for easier parsing
+  response.replace(" ", "");
+  response.replace("\r", "");
+  response.replace("\n", "");
+  response.replace(">", "");
+
+  int pidPos = response.indexOf("4146");
+  if (pidPos == -1) {
+    Serial.println(F("[ERROR] Invalid response or PID not supported"));
+    Serial.print(F("Cleaned response was: "));
+    Serial.println(response);
+    return -999.0;
+  }
+
+  // Extract hex value after "4146" (2 characters)
+  String hexValue = response.substring(pidPos + 4, pidPos + 6);
+  hexValue.trim();
+
+  if (hexValue.length() < 2) {
+    Serial.println(F("[ERROR] Hex value too short"));
+    return -999.0;
+  }
+
+  // Convert hex to decimal
+  int tempValue = (int)strtol(hexValue.c_str(), NULL, 16);
+
+  // Calculate temperature (formula: value - 40)
+  float temperature = tempValue - 40.0;
+
+  Serial.print(temperature);
+  Serial.println(F(" °C"));
+
+  return temperature;
 }
 
 // LED FUNCTIONS
